@@ -342,7 +342,7 @@
     </div>
     <div class="card" id="settingsCardWidget">
       <div class="week-title">ウィジェット</div>
-      <div class="empty-note">アプリを開くたびに、本日の1日の流れ(日付・朝/昼/放課後・1〜6時限)を埋め込んだ「day-schedule.html」が自動で書き出されます。ボタンからも同じ内容をいつでも書き出せます。書き出したファイルをSafariで開いてスクリーンショットを撮り、Photo Widgetアプリに読み込んでください。</div>
+      <div class="empty-note">本日の1日の流れ(日付・朝/昼/放課後・1〜6時限)を、選んだサイズのウィジェット用デザインに埋め込んで書き出します。書き出したファイルをSafariで開いてスクリーンショットを撮り、Photo Widgetアプリに読み込んでください。</div>
       <div class="row" style="margin-top:10px;">
         <label>サイズ
           <select id="widgetSizeSelect">
@@ -1770,9 +1770,6 @@
     document.body.removeChild(a);
     setTimeout(()=> URL.revokeObjectURL(url), 1000);
   }
-
-  // アプリを開いたときに1回だけ自動でウィジェットHTMLを書き出す
-  window.addEventListener("load", exportWidgetHTML, {once:true});
 
   document.getElementById("widgetUpdateBtn").addEventListener("click", exportWidgetHTML);
 
