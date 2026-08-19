@@ -270,8 +270,10 @@
         </div>
       </div>
       <div class="active-pattern-note">
-        使用中のパターン: <b id="activePatternLabel">未設定</b>
-        <button class="btn ghost small" id="planGoPattern">パターンを変更</button>
+        この週のパターン:
+        <select id="weekPatternSelect" style="margin-left:4px;">
+          <option value="">未設定(パターンを使わない)</option>
+        </select>
       </div>
     </div>
     <div id="planOutput"></div>
@@ -622,7 +624,8 @@
           schoolYear: parsed.schoolYear || null,
           deletedDefaultSubjects: parsed.deletedDefaultSubjects || [],
           archives: parsed.archives || {},
-          widgetSize: parsed.widgetSize || "square"
+          widgetSize: parsed.widgetSize || "square",
+          weekPatterns: parsed.weekPatterns || {}
         };
       }
       const v2 = localStorage.getItem(OLD_STORAGE_KEY_V2);
@@ -637,7 +640,7 @@
             hougo: Array.isArray(src.hougo) ? src.hougo.join("\n") : (src.hougo||"")
           };
         });
-        return {schedule:p.schedule||{}, memo:migrateMemo(p.memo||{}), patterns:p.patterns||{}, overrides:{}, dayExtras:migratedExtras, customSubjects:[], customClasses:[], draftGrid:{}, subjectOrder:[], memoCategories:[], maxPeriods:{}, schoolYear:null, deletedDefaultSubjects:[], archives:{}, widgetSize:"square"};
+        return {schedule:p.schedule||{}, memo:migrateMemo(p.memo||{}), patterns:p.patterns||{}, overrides:{}, dayExtras:migratedExtras, customSubjects:[], customClasses:[], draftGrid:{}, subjectOrder:[], memoCategories:[], maxPeriods:{}, schoolYear:null, deletedDefaultSubjects:[], archives:{}, widgetSize:"square", weekPatterns:{}};
       }
       const v1 = localStorage.getItem(OLD_STORAGE_KEY_V1);
       if(v1){
@@ -647,10 +650,10 @@
           const v = p.memo[ds];
           migratedMemo[ds] = (typeof v === "string") ? {title:"", body:v} : v;
         });
-        return {schedule:p.schedule||{}, memo:migrateMemo(migratedMemo), patterns:{}, overrides:{}, dayExtras:{}, customSubjects:[], customClasses:[], draftGrid:{}, subjectOrder:[], memoCategories:[], maxPeriods:{}, schoolYear:null, deletedDefaultSubjects:[], archives:{}, widgetSize:"square"};
+        return {schedule:p.schedule||{}, memo:migrateMemo(migratedMemo), patterns:{}, overrides:{}, dayExtras:{}, customSubjects:[], customClasses:[], draftGrid:{}, subjectOrder:[], memoCategories:[], maxPeriods:{}, schoolYear:null, deletedDefaultSubjects:[], archives:{}, widgetSize:"square", weekPatterns:{}};
       }
-      return {schedule:{}, memo:{}, patterns:{}, overrides:{}, dayExtras:{}, customSubjects:[], customClasses:[], draftGrid:{}, subjectOrder:[], memoCategories:[], maxPeriods:{}, schoolYear:null, deletedDefaultSubjects:[], archives:{}, widgetSize:"square"};
-    }catch(e){ return {schedule:{}, memo:{}, patterns:{}, overrides:{}, dayExtras:{}, customSubjects:[], customClasses:[], draftGrid:{}, subjectOrder:[], memoCategories:[], maxPeriods:{}, schoolYear:null, deletedDefaultSubjects:[], archives:{}, widgetSize:"square"}; }
+      return {schedule:{}, memo:{}, patterns:{}, overrides:{}, dayExtras:{}, customSubjects:[], customClasses:[], draftGrid:{}, subjectOrder:[], memoCategories:[], maxPeriods:{}, schoolYear:null, deletedDefaultSubjects:[], archives:{}, widgetSize:"square", weekPatterns:{}};
+    }catch(e){ return {schedule:{}, memo:{}, patterns:{}, overrides:{}, dayExtras:{}, customSubjects:[], customClasses:[], draftGrid:{}, subjectOrder:[], memoCategories:[], maxPeriods:{}, schoolYear:null, deletedDefaultSubjects:[], archives:{}, widgetSize:"square", weekPatterns:{}}; }
   }
   function saveData(){
     try{
@@ -736,32 +739,31 @@
     document.querySelector(`.tab-btn[data-tab="${tab}"]`).classList.add("active");
     document.getElementById("panel-"+tab).classList.add("active");
     if(tab==="pattern") renderPatternList();
-    if(tab==="plan") { updateActivePatternLabel(); renderPlan(); }
+    if(tab==="plan") { renderPlan(); }
     if(tab==="flow") renderFlow();
     if(tab==="draft") renderDraftTable();
     if(tab==="month") renderMonth();
     if(tab==="memo") { const m = currentMemoId ? (DATA.memo[currentMemoDate]||[]).find(x=>x.id===currentMemoId) : null; loadDrawingToCanvas(m ? m.drawing||null : null); }
     if(tab==="settings") renderSettings();
   }
-  document.getElementById("planGoPattern").addEventListener("click", ()=> switchTab("pattern"));
 
-  // ---------- パターン(アクティブ管理含む) ----------
-  function getActivePattern(){
-    const id = Object.keys(DATA.patterns).find(id=>DATA.patterns[id].active);
-    return id ? DATA.patterns[id] : null;
+  // ---------- パターン(週ごとの選択) ----------
+  function getWeekPatternId(mondayStr){
+    return DATA.weekPatterns[mondayStr] || "";
   }
-  function updateActivePatternLabel(){
-    const pat = getActivePattern();
-    document.getElementById("activePatternLabel").textContent = pat ? pat.name : "未設定";
+  function getPatternForDate(dateStr){
+    const mondayStr = fmt(getMonday(parse(dateStr)));
+    const pid = getWeekPatternId(mondayStr);
+    return pid && DATA.patterns[pid] ? DATA.patterns[pid] : null;
   }
 
-  // 日付+時限から実際に表示すべき内容を解決する(手入力 > 校時振替+パターン)
+  // 日付+時限から実際に表示すべき内容を解決する(手入力 > 校時振替+その週のパターン)
   function resolveCell(dateStr, period){
     const manual = DATA.schedule[dateStr] && DATA.schedule[dateStr][period];
     if(manual) return {value: manual, manual:true};
     const ov = DATA.overrides[dateStr] && DATA.overrides[dateStr][period];
     if(ov && ov.blank) return {value:null, manual:false, blank:true};
-    const pat = getActivePattern();
+    const pat = getPatternForDate(dateStr);
     if(!pat) return {value:null, manual:false};
     const actualWi = weekdayIdx(parse(dateStr));
     const effWi = ov ? ov.wi : actualWi;
@@ -1056,8 +1058,24 @@
   document.getElementById("planNextWeek").addEventListener("click", ()=> setWeek(addDays(currentWeekMonday,7)));
   document.getElementById("planThisWeek").addEventListener("click", ()=> setWeek(getMonday(new Date())));
 
+  function refreshWeekPatternSelect(){
+    const sel = document.getElementById("weekPatternSelect");
+    const mondayStr = fmt(currentWeekMonday);
+    const currentVal = getWeekPatternId(mondayStr);
+    sel.innerHTML = '<option value="">未設定(パターンを使わない)</option>' +
+      Object.keys(DATA.patterns).map(id=>`<option value="${id}">${escapeHtml(DATA.patterns[id].name)}</option>`).join("");
+    sel.value = currentVal;
+  }
+  document.getElementById("weekPatternSelect").addEventListener("change", (e)=>{
+    const mondayStr = fmt(currentWeekMonday);
+    if(e.target.value) DATA.weekPatterns[mondayStr] = e.target.value;
+    else delete DATA.weekPatterns[mondayStr];
+    saveData();
+    renderPlan();
+  });
+
   function renderPlan(){
-    updateActivePatternLabel();
+    refreshWeekPatternSelect();
     const weekMon = currentWeekMonday;
     const weekSat = addDays(weekMon,5);
     planWeekLabel.textContent = `${labelJP(weekMon)} 〜 ${labelJP(weekSat)}の週`;
@@ -2082,7 +2100,6 @@
     patternList.innerHTML = ids.map(id=>{
       const p = DATA.patterns[id];
       return `<div class="pattern-chip ${id===currentPatternId?'active':''}" data-id="${id}">
-        <span class="star" data-star="${id}">${p.active?"★":"☆"}</span>
         <span data-select="${id}">${escapeHtml(p.name)}</span>
       </div>`;
     }).join("");
@@ -2091,16 +2108,6 @@
         currentPatternId = el.dataset.select;
         renderPatternList();
         renderPatternTable(currentPatternId);
-      });
-    });
-    patternList.querySelectorAll("[data-star]").forEach(el=>{
-      el.addEventListener("click", (e)=>{
-        e.stopPropagation();
-        const id = el.dataset.star;
-        Object.keys(DATA.patterns).forEach(pid=> DATA.patterns[pid].active = (pid===id) ? !DATA.patterns[pid].active : false);
-        saveData();
-        renderPatternList();
-        updateActivePatternLabel();
       });
     });
     if(currentPatternId && DATA.patterns[currentPatternId]){
@@ -2127,7 +2134,7 @@
   function renderPatternTable(patternId){
     const pat = DATA.patterns[patternId];
     if(!pat) return;
-    patternEditorTitle.innerHTML = escapeHtml(pat.name) + (pat.active ? '<span class="active-badge">使用中</span>' : '');
+    patternEditorTitle.innerHTML = escapeHtml(pat.name);
     let html = `<thead><tr><th></th>`;
     WEEKDAYS.forEach(w=> html += `<th>${w}</th>`);
     html += `</tr></thead><tbody>`;
@@ -2176,12 +2183,11 @@
   document.getElementById("patternAddBtn").addEventListener("click", ()=>{
     showPrompt("パターン名を入力してください（例: 前期パターン、A週 など）", "", (name)=>{
       const id = genId();
-      const isFirst = Object.keys(DATA.patterns).length===0;
-      DATA.patterns[id] = {name:name, grid:{}, active:isFirst};
+      DATA.patterns[id] = {name:name, grid:{}};
       saveData();
       currentPatternId = id;
       renderPatternList();
-      updateActivePatternLabel();
+      refreshWeekPatternSelect();
     });
   });
   document.getElementById("patternRenameBtn").addEventListener("click", ()=>{
@@ -2191,7 +2197,7 @@
       pat.name = name;
       saveData();
       renderPatternList();
-      updateActivePatternLabel();
+      refreshWeekPatternSelect();
     });
   });
   document.getElementById("patternDeleteBtn").addEventListener("click", ()=>{
@@ -2200,10 +2206,13 @@
       {label:"キャンセル", className:"ghost"},
       {label:"削除する", className:"warn", onClick:()=>{
         delete DATA.patterns[currentPatternId];
+        Object.keys(DATA.weekPatterns).forEach(wk=>{
+          if(DATA.weekPatterns[wk]===currentPatternId) delete DATA.weekPatterns[wk];
+        });
         saveData();
         currentPatternId = null;
         renderPatternList();
-        updateActivePatternLabel();
+        refreshWeekPatternSelect();
       }}
     ]);
   });
@@ -2381,7 +2390,6 @@
   }
 
   renderPatternList();
-  updateActivePatternLabel();
 
   // ---------- 設定タブ ----------
   function applySettingsSectionVisibility(){
