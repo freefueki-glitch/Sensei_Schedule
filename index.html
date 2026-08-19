@@ -342,7 +342,16 @@
     </div>
     <div class="card" id="settingsCardWidget">
       <div class="week-title">ウィジェット</div>
-      <div class="empty-note">本日の1日の流れ(日付・朝/昼/放課後・1〜6時限)を、縦長ウィジェット用のデザインに埋め込んで書き出します。書き出したファイルをSafariで開いてスクリーンショットを撮り、Photo Widgetアプリに読み込んでください。</div>
+      <div class="empty-note">アプリを開くたびに、本日の1日の流れ(日付・朝/昼/放課後・1〜6時限)を埋め込んだ「day-schedule.html」が自動で書き出されます。ボタンからも同じ内容をいつでも書き出せます。書き出したファイルをSafariで開いてスクリーンショットを撮り、Photo Widgetアプリに読み込んでください。</div>
+      <div class="row" style="margin-top:10px;">
+        <label>サイズ
+          <select id="widgetSizeSelect">
+            <option value="square">正方形(大サイズ・1000×1000)</option>
+            <option value="vertical">縦長(600×1200)</option>
+            <option value="horizontal">横長(中サイズ・1050×465)</option>
+          </select>
+        </label>
+      </div>
       <div class="row" style="margin-top:10px;">
         <button class="btn small" id="widgetUpdateBtn">📥 ウィジェットを更新</button>
         <span style="font-size:12px; color:var(--ink-soft);">「day-schedule.html」として書き出します</span>
@@ -612,7 +621,8 @@
           maxPeriods: parsed.maxPeriods || {},
           schoolYear: parsed.schoolYear || null,
           deletedDefaultSubjects: parsed.deletedDefaultSubjects || [],
-          archives: parsed.archives || {}
+          archives: parsed.archives || {},
+          widgetSize: parsed.widgetSize || "square"
         };
       }
       const v2 = localStorage.getItem(OLD_STORAGE_KEY_V2);
@@ -627,7 +637,7 @@
             hougo: Array.isArray(src.hougo) ? src.hougo.join("\n") : (src.hougo||"")
           };
         });
-        return {schedule:p.schedule||{}, memo:migrateMemo(p.memo||{}), patterns:p.patterns||{}, overrides:{}, dayExtras:migratedExtras, customSubjects:[], customClasses:[], draftGrid:{}, subjectOrder:[], memoCategories:[], maxPeriods:{}, schoolYear:null, deletedDefaultSubjects:[], archives:{}};
+        return {schedule:p.schedule||{}, memo:migrateMemo(p.memo||{}), patterns:p.patterns||{}, overrides:{}, dayExtras:migratedExtras, customSubjects:[], customClasses:[], draftGrid:{}, subjectOrder:[], memoCategories:[], maxPeriods:{}, schoolYear:null, deletedDefaultSubjects:[], archives:{}, widgetSize:"square"};
       }
       const v1 = localStorage.getItem(OLD_STORAGE_KEY_V1);
       if(v1){
@@ -637,10 +647,10 @@
           const v = p.memo[ds];
           migratedMemo[ds] = (typeof v === "string") ? {title:"", body:v} : v;
         });
-        return {schedule:p.schedule||{}, memo:migrateMemo(migratedMemo), patterns:{}, overrides:{}, dayExtras:{}, customSubjects:[], customClasses:[], draftGrid:{}, subjectOrder:[], memoCategories:[], maxPeriods:{}, schoolYear:null, deletedDefaultSubjects:[], archives:{}};
+        return {schedule:p.schedule||{}, memo:migrateMemo(migratedMemo), patterns:{}, overrides:{}, dayExtras:{}, customSubjects:[], customClasses:[], draftGrid:{}, subjectOrder:[], memoCategories:[], maxPeriods:{}, schoolYear:null, deletedDefaultSubjects:[], archives:{}, widgetSize:"square"};
       }
-      return {schedule:{}, memo:{}, patterns:{}, overrides:{}, dayExtras:{}, customSubjects:[], customClasses:[], draftGrid:{}, subjectOrder:[], memoCategories:[], maxPeriods:{}, schoolYear:null, deletedDefaultSubjects:[], archives:{}};
-    }catch(e){ return {schedule:{}, memo:{}, patterns:{}, overrides:{}, dayExtras:{}, customSubjects:[], customClasses:[], draftGrid:{}, subjectOrder:[], memoCategories:[], maxPeriods:{}, schoolYear:null, deletedDefaultSubjects:[], archives:{}}; }
+      return {schedule:{}, memo:{}, patterns:{}, overrides:{}, dayExtras:{}, customSubjects:[], customClasses:[], draftGrid:{}, subjectOrder:[], memoCategories:[], maxPeriods:{}, schoolYear:null, deletedDefaultSubjects:[], archives:{}, widgetSize:"square"};
+    }catch(e){ return {schedule:{}, memo:{}, patterns:{}, overrides:{}, dayExtras:{}, customSubjects:[], customClasses:[], draftGrid:{}, subjectOrder:[], memoCategories:[], maxPeriods:{}, schoolYear:null, deletedDefaultSubjects:[], archives:{}, widgetSize:"square"}; }
   }
   function saveData(){
     try{
@@ -1422,7 +1432,108 @@
     </div>`;
   }
 
-  function generateWidgetHtml(ds){
+  function generateWidgetHtmlSquare(ds){
+    const d = parse(ds);
+    const dateMain = `${d.getMonth()+1}/${d.getDate()}`;
+    const weekdayLabel = (WEEKDAYS[weekdayIdx(d)] || "") + "曜日";
+    const asaText = getExtraText(ds, "asa").trim() || "予定なし";
+    const hiruText = getExtraText(ds, "hiru").trim() || "予定なし";
+    const hougoText = getExtraText(ds, "hougo").trim() || "予定なし";
+
+    const part1 = [1,2,3,4].map(p => buildWidgetPeriodRow(p, resolveCell(ds,p))).join("");
+    const part2 = [5,6].map(p => buildWidgetPeriodRow(p, resolveCell(ds,p))).join("");
+
+    return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>1日の流れ ${escapeHtml(dateMain)}</title>
+<style>
+  html, body{ margin:0; padding:0; }
+  .widget{
+    width:1000px;
+    height:1000px;
+    overflow:hidden;
+    box-sizing:border-box;
+    background:#FFFFFF;
+    font-family:-apple-system, BlinkMacSystemFont, "SF Pro Text",
+                "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif;
+    color:#111111;
+    padding:30px 34px 26px;
+    display:flex;
+    flex-direction:column;
+  }
+  .widget-header{ flex-shrink:0; margin-bottom:14px; }
+  .header-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .date-main{ font-size:40px; font-weight:800; letter-spacing:0.5px; color:#000000; }
+  .weekday-badge{ font-size:18px; font-weight:700; color:#ffffff; background:#1F4A44; border-radius:9px; padding:6px 18px; }
+  .app-label{ font-size:14px; font-weight:700; color:#000000; }
+  .free-chip{
+    flex-shrink:0; background:#ffffff; border:2px solid #000000; border-radius:12px;
+    padding:10px 16px; display:flex; align-items:center; gap:12px;
+  }
+  .free-chip .tag{
+    flex-shrink:0; font-size:13px; font-weight:800; color:#ffffff;
+    background:#1F4A44; border-radius:7px; padding:4px 10px;
+  }
+  .free-chip .txt{ font-size:14.5px; font-weight:600; color:#000000; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .free-chip.asa{ margin-bottom:12px; }
+  .free-chip.hougo{ margin-top:12px; }
+  .free-chip.hiru{ flex-shrink:0; margin:2px 0; }
+  .period-list{ flex:1; display:flex; flex-direction:column; gap:8px; min-height:0; }
+  .period-row{ flex:1; display:flex; align-items:stretch; gap:14px; min-height:0; }
+  .period-marker{ flex-shrink:0; width:42px; display:flex; flex-direction:column; align-items:center; }
+  .period-num-circle{
+    width:34px; height:34px; border-radius:50%; background:#1F4A44; color:#ffffff;
+    font-size:15px; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .period-line{ flex:1; width:3px; background:#000000; margin-top:4px; }
+  .period-row:last-child .period-line{ display:none; }
+  .period-card{
+    flex:1; background:#ffffff; border:2px solid #000000; border-radius:12px; padding:8px 18px;
+    display:flex; flex-direction:column; justify-content:center; min-width:0;
+  }
+  .period-card.empty{
+    background:repeating-linear-gradient(45deg,#E8E8E8,#E8E8E8 8px,#D3D3D3 8px,#D3D3D3 16px);
+    border-style:dashed;
+  }
+  .period-top{ display:flex; align-items:baseline; gap:10px; margin-bottom:2px; }
+  .period-subject{ font-size:21px; font-weight:800; color:#000000; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .period-class{ font-size:13px; font-weight:700; color:#3D2B5A; }
+  .period-memo{ font-size:13.5px; font-weight:600; color:#111111; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .period-card.empty .period-subject{ color:#3A3A3A; font-weight:700; }
+</style>
+</head>
+<body>
+<div class="widget">
+  <div class="widget-header">
+    <div class="header-top">
+      <div class="date-main">${escapeHtml(dateMain)}</div>
+      <div class="weekday-badge">${escapeHtml(weekdayLabel)}</div>
+    </div>
+    <div class="app-label">スケジュール帳(先生用)</div>
+  </div>
+  <div class="free-chip asa">
+    <span class="tag">朝</span>
+    <span class="txt">${escapeHtml(asaText)}</span>
+  </div>
+  <div class="period-list">${part1}
+    <div class="free-chip hiru">
+      <span class="tag">昼</span>
+      <span class="txt">${escapeHtml(hiruText)}</span>
+    </div>${part2}
+  </div>
+  <div class="free-chip hougo">
+    <span class="tag">放課後</span>
+    <span class="txt">${escapeHtml(hougoText)}</span>
+  </div>
+</div>
+</body>
+</html>
+`;
+  }
+
+  function generateWidgetHtmlVertical(ds){
     const d = parse(ds);
     const dateMain = `${d.getMonth()+1}/${d.getDate()}`;
     const weekdayLabel = (WEEKDAYS[weekdayIdx(d)] || "") + "曜日";
@@ -1523,8 +1634,132 @@
 `;
   }
 
-  document.getElementById("widgetUpdateBtn").addEventListener("click", ()=>{
-    const html = generateWidgetHtml(todayStr());
+  function buildWidgetGridCard(p, resolved){
+    if(resolved.value){
+      const cell = resolved.value;
+      return `
+    <div class="period-card">
+      <div class="period-top">
+        <span class="period-num">${p}</span>
+        <span class="period-subject">${escapeHtml(cell.subject)}</span>
+        ${cell.cls ? `<span class="period-class">${escapeHtml(cell.cls)}</span>` : ""}
+      </div>
+      <div class="period-memo">${cell.memo ? escapeHtml(cell.memo) : "&nbsp;"}</div>
+    </div>`;
+    }
+    const label = resolved.blank ? "空白" : "未入力";
+    return `
+    <div class="period-card empty">
+      <div class="period-top">
+        <span class="period-num">${p}</span>
+        <span class="period-subject">${label}</span>
+      </div>
+      <div class="period-memo">&nbsp;</div>
+    </div>`;
+  }
+
+  function generateWidgetHtmlHorizontal(ds){
+    const d = parse(ds);
+    const dateMain = `${d.getMonth()+1}/${d.getDate()}`;
+    const weekdayLabel = (WEEKDAYS[weekdayIdx(d)] || "") + "曜日";
+    const asaText = getExtraText(ds, "asa").trim() || "予定なし";
+    const hiruText = getExtraText(ds, "hiru").trim() || "予定なし";
+    const hougoText = getExtraText(ds, "hougo").trim() || "予定なし";
+
+    const cards = [1,2,3,4,5,6].map(p => buildWidgetGridCard(p, resolveCell(ds,p))).join("");
+
+    return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>1日の流れ ${escapeHtml(dateMain)}</title>
+<style>
+  html, body{ margin:0; padding:0; }
+  .widget{
+    width:1050px;
+    height:465px;
+    overflow:hidden;
+    box-sizing:border-box;
+    background:#FFFFFF;
+    font-family:-apple-system, BlinkMacSystemFont, "SF Pro Text",
+                "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif;
+    color:#111111;
+    padding:24px 28px 20px;
+    display:flex;
+    flex-direction:column;
+  }
+  .widget-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-shrink:0; }
+  .header-left{ display:flex; align-items:center; gap:14px; }
+  .date-main{ font-size:32px; font-weight:800; letter-spacing:0.5px; color:#000000; }
+  .weekday-badge{ font-size:16px; font-weight:700; color:#ffffff; background:#1F4A44; border-radius:8px; padding:4px 14px; }
+  .app-label{ font-size:14px; font-weight:700; color:#000000; }
+  .free-row{ display:flex; gap:10px; margin-bottom:12px; flex-shrink:0; }
+  .free-chip{
+    flex:1; background:#ffffff; border:2px solid #000000; border-radius:10px;
+    padding:7px 12px; font-size:13.5px; font-weight:600; color:#000000;
+    display:flex; align-items:center; gap:8px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
+  }
+  .free-chip .tag{
+    flex-shrink:0; font-size:11.5px; font-weight:800; color:#ffffff;
+    background:#1F4A44; border-radius:6px; padding:3px 9px;
+  }
+  .free-chip .txt{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .period-grid{
+    flex:1; display:grid; grid-template-columns:repeat(3, 1fr); grid-template-rows:repeat(2, 1fr); gap:10px;
+  }
+  .period-card{
+    background:#ffffff; border:2px solid #000000; border-radius:11px; padding:10px 14px;
+    display:flex; flex-direction:column; justify-content:center; min-width:0;
+  }
+  .period-card.empty{
+    background:repeating-linear-gradient(45deg,#E8E8E8,#E8E8E8 8px,#D3D3D3 8px,#D3D3D3 16px);
+    border-style:dashed;
+  }
+  .period-top{ display:flex; align-items:baseline; gap:8px; margin-bottom:3px; }
+  .period-num{ font-size:13px; font-weight:800; color:#1F4A44; flex-shrink:0; }
+  .period-subject{ font-size:19px; font-weight:800; color:#000000; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .period-class{ font-size:12px; font-weight:700; color:#3D2B5A; margin-left:2px; }
+  .period-memo{ font-size:12.5px; font-weight:600; color:#111111; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .period-card.empty .period-subject{ color:#3A3A3A; font-weight:700; }
+</style>
+</head>
+<body>
+<div class="widget">
+  <div class="widget-header">
+    <div class="header-left">
+      <div class="date-main">${escapeHtml(dateMain)}</div>
+      <div class="weekday-badge">${escapeHtml(weekdayLabel)}</div>
+    </div>
+    <div class="app-label">スケジュール帳(先生用)</div>
+  </div>
+  <div class="free-row">
+    <div class="free-chip"><span class="tag">朝</span><span class="txt">${escapeHtml(asaText)}</span></div>
+    <div class="free-chip"><span class="tag">昼</span><span class="txt">${escapeHtml(hiruText)}</span></div>
+    <div class="free-chip"><span class="tag">放</span><span class="txt">${escapeHtml(hougoText)}</span></div>
+  </div>
+  <div class="period-grid">${cards}
+  </div>
+</div>
+</body>
+</html>
+`;
+  }
+
+  function generateWidgetHtml(ds, size){
+    if(size==="vertical") return generateWidgetHtmlVertical(ds);
+    if(size==="horizontal") return generateWidgetHtmlHorizontal(ds);
+    return generateWidgetHtmlSquare(ds);
+  }
+
+  const widgetSizeSelect = document.getElementById("widgetSizeSelect");
+  widgetSizeSelect.value = DATA.widgetSize || "square";
+  widgetSizeSelect.addEventListener("change", ()=>{
+    DATA.widgetSize = widgetSizeSelect.value;
+    saveData();
+  });
+
+  function exportWidgetHTML(){
+    const html = generateWidgetHtml(todayStr(), DATA.widgetSize || "square");
     const blob = new Blob([html], {type:"text/html"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1534,7 +1769,12 @@
     a.click();
     document.body.removeChild(a);
     setTimeout(()=> URL.revokeObjectURL(url), 1000);
-  });
+  }
+
+  // アプリを開いたときに1回だけ自動でウィジェットHTMLを書き出す
+  window.addEventListener("load", exportWidgetHTML, {once:true});
+
+  document.getElementById("widgetUpdateBtn").addEventListener("click", exportWidgetHTML);
 
   // ---------- メモ帳タブ ----------
   const memoIndex = document.getElementById("memoIndex");
