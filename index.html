@@ -681,6 +681,7 @@
   function escapeHtml(s){
     return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   }
+  function subjectLabel(subj){ return subj ? subj : "空白"; }
 
   // ---------- 共用: 名前入力モーダル ----------
   const promptModal = document.getElementById("promptModal");
@@ -899,13 +900,13 @@
     subjectGrid.className = "subject-grid";
     subjectGrid.innerHTML = "";
     const blankChip = document.createElement("div");
-    blankChip.className = "subject-chip blank-chip";
+    blankChip.className = "subject-chip blank-chip" + (selected==="" ? " selected" : "");
     blankChip.innerHTML = "空白";
     blankChip.addEventListener("click", ()=>{
-      if(!cellTarget) return;
-      applyCellValue(cellTarget, null);
-      closeCellModal();
-      afterCellChange();
+      selectedSubject = "";
+      customSubject.value = "";
+      subjectGrid.querySelectorAll(".subject-chip").forEach(c=>c.classList.remove("selected"));
+      blankChip.classList.add("selected");
     });
     subjectGrid.appendChild(blankChip);
     allSubjects().forEach(s=>{
@@ -996,16 +997,21 @@
   });
   document.getElementById("cellSaveBtn").addEventListener("click", ()=>{
     if(!cellTarget) return;
-    if(!selectedSubject){ closeCellModal(); return; }
+    if(selectedSubject===null || selectedSubject===undefined){ closeCellModal(); return; }
     const subj = selectedSubject.trim();
     const cls = cellClass.value.trim();
+    const memo = cellMemo.value.trim();
     if(subj && !allSubjects().includes(subj)){
       DATA.customSubjects.push(subj);
     }
     if(cls && !DATA.customClasses.includes(cls)){
       DATA.customClasses.push(cls);
     }
-    applyCellValue(cellTarget, {subject:subj, cls:cls, memo:cellMemo.value.trim()});
+    if(!subj && !cls && !memo){
+      applyCellValue(cellTarget, null);
+    } else {
+      applyCellValue(cellTarget, {subject:subj, cls:cls, memo:memo});
+    }
     closeCellModal();
     afterCellChange();
   });
@@ -1126,7 +1132,7 @@
         if(cell){
           html += `<div class="cell-inner">
             <div class="cell-subject-tap" data-date="${ds}" data-period="${p}">
-              <div class="cell-subject">${escapeHtml(cell.subject)}</div>
+              <div class="cell-subject">${escapeHtml(subjectLabel(cell.subject))}</div>
               ${cell.cls?`<div class="cell-class">${escapeHtml(cell.cls)}</div>`:""}
             </div>
             <div class="cell-memo-line"></div>
@@ -1330,7 +1336,7 @@
         const ds = fmt(d);
         PERIODS.forEach(p=>{
           const resolved = resolveCell(ds,p);
-          if(resolved.value){
+          if(resolved.value && resolved.value.subject){
             tally[resolved.value.subject] = (tally[resolved.value.subject]||0)+1;
             total++;
           }
@@ -1387,7 +1393,7 @@
         if(cell){
           html += `<div class="flow-period-row">
             <div class="p-num">${p}</div>
-            <div class="p-subj">${escapeHtml(cell.subject)}</div>
+            <div class="p-subj">${escapeHtml(subjectLabel(cell.subject))}</div>
             ${cell.cls?`<div class="p-cls">(${escapeHtml(cell.cls)})</div>`:""}
             <div class="p-memo">${cell.memo?escapeHtml(cell.memo):""}</div>
           </div>`;
@@ -1436,7 +1442,7 @@
       </div>
       <div class="period-card">
         <div class="period-top">
-          <span class="period-subject">${escapeHtml(cell.subject)}</span>
+          <span class="period-subject">${escapeHtml(subjectLabel(cell.subject))}</span>
           ${cell.cls ? `<span class="period-class">${escapeHtml(cell.cls)}</span>` : ""}
         </div>
         <div class="period-memo">${cell.memo ? escapeHtml(cell.memo) : "&nbsp;"}</div>
@@ -1668,7 +1674,7 @@
     <div class="period-card">
       <div class="period-top">
         <span class="period-num">${p}</span>
-        <span class="period-subject">${escapeHtml(cell.subject)}</span>
+        <span class="period-subject">${escapeHtml(subjectLabel(cell.subject))}</span>
         ${cell.cls ? `<span class="period-class">${escapeHtml(cell.cls)}</span>` : ""}
       </div>
       <div class="period-memo">${cell.memo ? escapeHtml(cell.memo) : "&nbsp;"}</div>
@@ -2157,7 +2163,7 @@
         const cell = pat.grid[wi+"-"+p];
         html += `<td data-day="${wi}" data-period="${p}">`;
         if(cell){
-          html += `<div class="cell-inner"><div class="cell-subject">${escapeHtml(cell.subject)}</div>`;
+          html += `<div class="cell-inner"><div class="cell-subject">${escapeHtml(subjectLabel(cell.subject))}</div>`;
           if(cell.cls) html += `<div class="cell-class">${escapeHtml(cell.cls)}</div>`;
           html += `</div>`;
         } else {
@@ -2251,7 +2257,7 @@
         const cell = DATA.draftGrid[wi+"-"+p];
         html += `<td data-day="${wi}" data-period="${p}">`;
         if(cell){
-          html += `<div class="cell-inner"><div class="cell-subject">${escapeHtml(cell.subject)}</div>`;
+          html += `<div class="cell-inner"><div class="cell-subject">${escapeHtml(subjectLabel(cell.subject))}</div>`;
           if(cell.cls) html += `<div class="cell-class">${escapeHtml(cell.cls)}</div>`;
           html += `</div>`;
         } else {
@@ -2356,7 +2362,7 @@
         let anyValue = false;
         PERIODS.forEach(p=>{
           const resolved = resolveCell(ds,p);
-          if(resolved.value){ subjLines.push(`${p}:${resolved.value.subject}`); anyValue = true; }
+          if(resolved.value){ subjLines.push(`${p}:${subjectLabel(resolved.value.subject)}`); anyValue = true; }
         });
         const ov = DATA.overrides[ds] || {};
         let isHoliday;
